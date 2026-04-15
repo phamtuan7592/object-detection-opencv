@@ -13,7 +13,7 @@ for idx, class_name in od.classes.items():
 print(f"\nTổng cộng: {len(od.classes)} đối tượng")
 
 # Load video
-cap = cv2.VideoCapture("people.mkv")
+cap = cv2.VideoCapture("demo.mkv")
 
 # Nếu không mở được video thì dùng webcam
 if not cap.isOpened():
@@ -22,14 +22,18 @@ if not cap.isOpened():
 
 print("\nPress ESC to exit, SPACE to pause")
 
+# CHỌN CLASS BẠN MUỐN DÒ
+TARGET_CLASSES = [2]  # Thay đổi theo nhu cầu
+
+
 while True:
     ret, frame = cap.read()
     if not ret:
         print("End of video or cannot read frame")
         break
     
-    # Detect objects
-    bboxes, class_ids, scores = od.detect(frame, conf=0.35)
+    # Detect objects - CHỈ LẤY CÁC CLASS ĐÃ CHỌN
+    bboxes, class_ids, scores = od.detect(frame, conf=0.35, classes=TARGET_CLASSES)
     
     # Draw bounding boxes
     frame = od.draw_boxes(frame, bboxes, class_ids, scores, line_thickness=2)

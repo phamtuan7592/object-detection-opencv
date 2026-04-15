@@ -19,13 +19,15 @@ class ObjectDetector:
         # Lấy class names từ model
         self.classes = self.model.names
         
-    def detect(self, frame, conf=0.35):
+    def detect(self, frame, conf=0.35, imgsz=640, classes=None):
         """
         Phát hiện đối tượng trong frame
         
         Args:
             frame: ảnh đầu vào
             conf: ngưỡng confidence
+            imgsz: kích thước ảnh đầu vào
+            classes: list các class ID cần lọc (VD: [0,2,3] hoặc None để lấy tất cả)
             
         Returns:
             boxes: list of [x, y, width, height]
@@ -35,8 +37,8 @@ class ObjectDetector:
         if conf is None:
             conf = self.min_score_thresh
             
-        # Chạy YOLO detection
-        results = self.model(frame, conf=conf, verbose=False)
+        # Chạy YOLO detection với filter classes
+        results = self.model(frame, conf=conf, imgsz=imgsz, classes=classes, verbose=False)
         
         boxes = []
         class_ids = []
