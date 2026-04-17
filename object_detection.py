@@ -1,7 +1,7 @@
 import cv2
 from ultralytics import YOLO
 import numpy as np
-
+#chương 5: sử dụng yolo để nhận diện ảnh
 class ObjectDetector:
     def __init__(self, model_path="yolo11m.pt", min_score_thresh=0.35):
         """
