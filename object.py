@@ -9,7 +9,7 @@ import json
 TARGET_CLASSES = [0]  # Mặc định là 0: person
 
 print("Loading YOLO11 model...")
-od = ObjectDetector(model_path="yolo11m.pt", min_score_thresh=0.35)
+od = ObjectDetector(model_path="fruit.pt", min_score_thresh=0.35)
 print("Model loaded successfully!")
 
 # --- THIẾT LẬP CHƯƠNG 4 (PHÂN ĐOẠN ẢNH) ---
