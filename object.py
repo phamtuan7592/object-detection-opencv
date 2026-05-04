@@ -5,8 +5,6 @@ import sys
 import os
 import json
 
-# CHỌN CLASS BẠN MUỐN DÒ
-TARGET_CLASSES = [0]  # Mặc định là 0: person
 
 print("Loading YOLO11 model...")
 od = ObjectDetector(model_path="fruit.pt", min_score_thresh=0.35)
@@ -91,7 +89,7 @@ while True:
     
     # 4. CHƯƠNG 5: NHẬN DẠNG ẢNH (Nhận dạng và phân loại đối tượng)
     # Đưa frame gốc vào YOLO để đảm bảo AI nhận dạng con người chính xác nhất
-    bboxes, class_ids, scores = od.detect(frame, conf=0.35, classes=TARGET_CLASSES)
+    bboxes, class_ids, scores = od.detect(frame, conf=0.35)
     
     count = 0
     filtered_boxes = []
