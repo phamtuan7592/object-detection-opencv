@@ -11,7 +11,7 @@ Tài liệu này cung cấp hướng dẫn chi tiết về cách thiết lập m
 
 ---
 
-## 🛠 Phụ lục B – Hướng dẫn cài đặt
+## 🛠 Hướng dẫn cài đặt
 
 ### B.1 Cài đặt môi trường
 1.  **Tải Python:** Truy cập [python.org](https://www.python.org/) để tải và cài đặt phiên bản 3.10+. 
