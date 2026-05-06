@@ -28,7 +28,9 @@ Công cụ này cho phép bạn giới hạn khu vực nhận diện để tăng
 4.  **Chạy công cụ vẽ:** ```bash
     python ROI.py
     ```
+
 5.  **Thao tác chuột:** Click **chuột trái** để thêm các điểm tạo thành hình đa giác (polygon).
+
 6.  **Thao tác phím:**
     * Nhấn **`S`**: Lưu cấu hình vào tệp `roi.json`.
     * Nhấn **`ESC`**: Hủy bỏ và thoát công cụ.
