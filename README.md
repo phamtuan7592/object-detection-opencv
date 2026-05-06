@@ -20,7 +20,7 @@ Tài liệu này cung cấp hướng dẫn chi tiết về cách thiết lập m
     * *Mẹo: Trên Windows, bạn có thể gõ `cmd` vào thanh địa chỉ của File Explorer để mở nhanh.*
 3.  **Cài đặt thư viện:** Chạy lệnh sau để tự động cài đặt các thành phần cần thiết:
     ```bash
-    pip install -r requirements.txt
+    python -m pip install -r requirements.txt
     ```
 
 ### B.2 Thiết lập vùng quan tâm (ROI) - *Tùy chọn*
