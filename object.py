@@ -5,21 +5,113 @@ import sys
 import os
 import json
 
+# === CẤU HÌNH KÍCH THƯỚC HIỂN THỊ ===
+DESIRED_WIDTH = 1280
+DESIRED_HEIGHT = 720
 
 print("Loading YOLO11 model...")
 od = ObjectDetector(model_path="fruit.pt", min_score_thresh=0.35)
 print("Model loaded successfully!")
 
-# --- THIẾT LẬP CHƯƠNG 4 (PHÂN ĐOẠN ẢNH) ---
+# --- THIẾT LẬP BACKGROUND SUBTRACTOR ---
 print("Khởi tạo thuật toán Background Subtractor MOG2...")
 backSub = cv2.createBackgroundSubtractorMOG2(history=500, varThreshold=50, detectShadows=True)
 
+# === HỆ THỐNG TRACKING VÀ ĐẾM ===
+next_object_id = 0
+tracked_objects = {}  # {object_id: {'last_position': (cx, cy), 'counted': False}}
+counted_objects = set()
+total_unique_count = 0
+
+def get_object_center(box):
+    """Lấy tâm của bounding box"""
+    x, y, w, h = box
+    return (x + w // 2, y + h // 2)
+
+def calculate_distance(p1, p2):
+    """Tính khoảng cách Euclidean giữa 2 điểm"""
+    return np.sqrt((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2)
+
+def update_tracking_and_count(bboxes_display, roi_display, frame_count, max_distance=50):
+    """Cập nhật tracking và đếm các đối tượng DUY NHẤT"""
+    global next_object_id, total_unique_count, tracked_objects, counted_objects
+    
+    current_detections = []
+    
+    # Lấy tâm của tất cả các bounding box hiện tại
+    for box in bboxes_display:
+        center = get_object_center(box)
+        inside_roi = cv2.pointPolygonTest(roi_display, center, False) >= 0
+        current_detections.append({
+            'box': box,
+            'center': center,
+            'inside_roi': inside_roi
+        })
+    
+    # Cập nhật tracking cho các object hiện có
+    matched_current_ids = set()
+    
+    # Duyệt từng detection hiện tại
+    for detection in current_detections:
+        center = detection['center']
+        inside_roi = detection['inside_roi']
+        
+        # Tìm object đã tồn tại gần nhất
+        matched_id = None
+        min_dist = float('inf')
+        
+        for obj_id, obj_data in tracked_objects.items():
+            dist = calculate_distance(center, obj_data['last_position'])
+            if dist < min_dist and dist < max_distance:
+                min_dist = dist
+                matched_id = obj_id
+        
+        if matched_id is not None:
+            # Cập nhật object hiện có
+            matched_current_ids.add(matched_id)
+            tracked_objects[matched_id]['last_position'] = center
+            
+            # KIỂM TRA ĐẾM: Chỉ đếm khi object lần đầu vào ROI
+            if inside_roi and not tracked_objects[matched_id]['counted']:
+                total_unique_count += 1
+                tracked_objects[matched_id]['counted'] = True
+                counted_objects.add(matched_id)
+                # ĐÃ XÓA print
+        else:
+            # Tạo object mới
+            tracked_objects[next_object_id] = {
+                'last_position': center,
+                'counted': False,
+                'first_seen_frame': frame_count
+            }
+            
+            # Nếu object mới đã ở trong ROI ngay từ đầu -> đếm luôn
+            if inside_roi:
+                total_unique_count += 1
+                tracked_objects[next_object_id]['counted'] = True
+                counted_objects.add(next_object_id)
+                # ĐÃ XÓA print
+            
+            matched_current_ids.add(next_object_id)
+            next_object_id += 1
+    
+    # Xóa các object không còn xuất hiện
+    objects_to_remove = []
+    for obj_id in list(tracked_objects.keys()):
+        if obj_id not in matched_current_ids and tracked_objects[obj_id]['counted']:
+            objects_to_remove.append(obj_id)
+    
+    for obj_id in objects_to_remove:
+        del tracked_objects[obj_id]
+    
+    return total_unique_count
+
 # --- MENU CHỌN NGUỒN ---
 print("\n" + "="*40)
-print("HỆ THỐNG GIÁM SÁT THÔNG MINH (4 CHƯƠNG)")
+print("HỆ THỐNG GIÁM SÁT THÔNG MINH")
 print("="*40)
 print("1. Sử dụng Webcam (Real-time)")
-print("2. Sử dụng File Video (people.mkv)")
+print("2. Sử dụng File Video (demo.mkv)")
 print("3. Thoát")
 print("-"*40)
 
@@ -29,7 +121,7 @@ if choice == '1':
     cap = cv2.VideoCapture(0)
     source_label = "Webcam"
 elif choice == '2':
-    video_path = "D:/NguyenDucThinh/xulyanh/duan/object-detection-opencv/people.mkv"
+    video_path = "demo.mkv"
     cap = cv2.VideoCapture(video_path)
     source_label = f"Video: {video_path}"
 else:
@@ -39,84 +131,134 @@ if not cap.isOpened():
     print(f"\n[LỖI] Không thể mở được {source_label}!")
     sys.exit()
 
-# --- TẢI VÙNG ROI TỰ ĐỘNG TỪ FILE JSON ---
+# --- TẢI VÙNG ROI ---
 if os.path.exists("roi.json"):
     with open("roi.json", "r") as f:
         data = json.load(f)
-        ROI = np.array(data["ROI"], dtype=np.int32)
+        ROI_original = np.array(data["ROI"], dtype=np.int32)
     print("\n[INFO] Đã tải tọa độ ROI từ roi.json")
 else:
-    ROI = np.array([ [360, 213], [1121, 204], [1203, 628], [101, 654], [360, 215]], dtype=np.int32)
+    ROI_original = np.array([[0, 278], [1277, 145], [1266, 718], [6, 713], [1, 280]], dtype=np.int32)
     print("\n[INFO] Không tìm thấy roi.json, dùng ROI mặc định")
+
+# Lấy kích thước gốc
+original_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+original_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+print(f"Kích thước gốc video: {original_width}x{original_height}")
+
+# Tính tỉ lệ scale
+scale_x = DESIRED_WIDTH / original_width
+scale_y = DESIRED_HEIGHT / original_height
+
+# Tạo cửa sổ
+cv2.namedWindow("Chuong 4: Phan doan anh (Foreground Mask)", cv2.WINDOW_NORMAL)
+cv2.namedWindow("Chuong 3: Phat hien dac trung (Canny Edges)", cv2.WINDOW_NORMAL)
+cv2.namedWindow("Chuong 5: Nhan dang anh & Tong hop (YOLO11)", cv2.WINDOW_NORMAL)
 
 def is_inside_roi(box, roi):
     x, y, w, h = box
     cx = x + w // 2
     cy = y + h // 2
-    return cv2.pointPolygonTest(roi, (cx, cy), False) > 0
+    return cv2.pointPolygonTest(roi, (cx, cy), False) >= 0
 
-print("\nĐang chạy xử lý... Bấm ESC để thoát, SPACE để tạm dừng.")
+print("\n" + "="*50)
+print("HƯỚNG DẪN:")
+print("- ESC: Thoát")
+print("- SPACE: Tạm dừng/Tiếp tục")
+print("- r: Reset tổng đếm")
+print("="*50 + "\n")
+
+frame_count = 0
+paused = False
 
 while True:
-    ret, frame = cap.read()
-    if not ret:
+    if not paused:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        
+        frame_count += 1
+        frame_display = cv2.resize(frame, (DESIRED_WIDTH, DESIRED_HEIGHT))
+        ROI_display = (ROI_original * [scale_x, scale_y]).astype(np.int32)
+        
+        # Detect trên frame gốc
+        bboxes, class_ids, scores = od.detect(frame, conf=0.35)
+        
+        # Scale bounding boxes
+        bboxes_display = []
+        for box in bboxes:
+            x, y, w, h = box
+            x_disp = int(x * scale_x)
+            y_disp = int(y * scale_y)
+            w_disp = int(w * scale_x)
+            h_disp = int(h * scale_y)
+            bboxes_display.append([x_disp, y_disp, w_disp, h_disp])
+        
+        # Cập nhật tracking và đếm TỔNG DUY NHẤT
+        total_unique = update_tracking_and_count(bboxes_display, ROI_display, frame_count)
+        
+        # Đếm số lượng hiện tại trong ROI
+        current_in_roi = 0
+        filtered_boxes = []
+        filtered_ids = []
+        filtered_scores = []
+        
+        for box_disp, cid, score in zip(bboxes_display, class_ids, scores):
+            if is_inside_roi(box_disp, ROI_display):
+                current_in_roi += 1
+                filtered_boxes.append(box_disp)
+                filtered_ids.append(cid)
+                filtered_scores.append(score)
+        
+        # Xử lý background subtraction
+        blurred_frame = cv2.GaussianBlur(frame_display, (5, 5), 0)
+        fg_mask = backSub.apply(blurred_frame)
+        edges = cv2.Canny(fg_mask, 50, 150)
+        
+        # Vẽ kết quả
+        frame_result = frame_display.copy()
+        frame_result = od.draw_boxes(frame_result, filtered_boxes, filtered_ids, filtered_scores, line_thickness=2)
+        
+        # Vẽ ROI
+        cv2.polylines(frame_result, [ROI_display], True, (0, 255, 255), 2)
+        
+        # === HIỂN THỊ THÔNG TIN ===
+        # Số lượng hiện tại trong ROI (màu xanh)
+        cv2.putText(frame_result, f'Objects in ROI now: {current_in_roi}', (10, 40), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+        
+        # TỔNG SỐ DUY NHẤT ĐÃ ĐẾM (màu đỏ - nổi bật)
+        cv2.putText(frame_result, f'TOTAL COUNT: {total_unique}', (10, 85), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255), 3)
+        
+        # Hiển thị
+        cv2.imshow("Chuong 4: Phan doan anh (Foreground Mask)", fg_mask)
+        cv2.imshow("Chuong 3: Phat hien dac trung (Canny Edges)", edges)
+        cv2.imshow("Chuong 5: Nhan dang anh & Tong hop (YOLO11)", frame_result)
+    
+    # Xử lý phím
+    key = cv2.waitKey(10) & 0xFF
+    if key == 27:  # ESC
         break
-    
-    # ====================================================================
-    # PHẦN 1: ÁP DỤNG CÁC THUẬT TOÁN XỬ LÝ ẢNH TRUYỀN THỐNG (CHƯƠNG 2, 3, 4)
-    # ====================================================================
-    
-    # 1. CHƯƠNG 2: CÁC THUẬT TOÁN XỬ LÝ ẢNH (Lọc tuyến tính)
-    # Áp dụng Gaussian Blur để làm mịn ảnh, khử nhiễu giúp các bước sau chính xác hơn.
-    blurred_frame = cv2.GaussianBlur(frame, (5, 5), 0)
-    
-    # 2. CHƯƠNG 4: PHÂN ĐOẠN ẢNH (Đường viền động / Trừ nền)
-    # Sử dụng MOG2 để tách đối tượng đang di chuyển ra khỏi phông nền.
-    fg_mask = backSub.apply(blurred_frame)
-    
-    # 3. CHƯƠNG 3: PHÁT HIỆN ĐẶC TRƯNG (Phát hiện cạnh)
-    # Dùng thuật toán Canny trên ảnh Mask để trích xuất các đường viền đặc trưng.
-    edges = cv2.Canny(fg_mask, 50, 150)
+    elif key == ord(' '):  # SPACE
+        paused = not paused
+        print("[PAUSE]" if paused else "[RESUME]")
+    elif key == ord('r'):  # Reset
+        total_unique_count = 0
+        counted_objects.clear()
+        tracked_objects.clear()
+        next_object_id = 0
+        print("\n" + "!"*50)
+        print("[RESET] Đã reset tổng đếm về 0")
+        print("!"*50 + "\n")
 
-    # Hiển thị các bước xử lý ra các cửa sổ riêng biệt để demo cho giáo viên
-    # cv2.imshow("Chuong 2: Gaussian Blur", blurred_frame) # (Thường không cần show vì trông giống ảnh gốc)
-    cv2.imshow("Chuong 4: Phan doan anh (Foreground Mask)", fg_mask)
-    cv2.imshow("Chuong 3: Phat hien dac trung (Canny Edges)", edges)
-
-    # ====================================================================
-    # PHẦN 2: NHẬN DẠNG BẰNG AI (CHƯƠNG 5) VÀ XỬ LÝ LOGIC NGHIỆP VỤ
-    # ====================================================================
-    
-    # 4. CHƯƠNG 5: NHẬN DẠNG ẢNH (Nhận dạng và phân loại đối tượng)
-    # Đưa frame gốc vào YOLO để đảm bảo AI nhận dạng con người chính xác nhất
-    bboxes, class_ids, scores = od.detect(frame, conf=0.35)
-    
-    count = 0
-    filtered_boxes = []
-    filtered_ids = []
-    filtered_scores = []
-    
-    for box, cid, score in zip(bboxes, class_ids, scores):
-        if is_inside_roi(box, ROI):
-            count += 1
-            filtered_boxes.append(box)
-            filtered_ids.append(cid)
-            filtered_scores.append(score)
-    
-    # Vẽ kết quả lên frame
-    frame = od.draw_boxes(frame, filtered_boxes, filtered_ids, filtered_scores, line_thickness=2)
-    cv2.polylines(frame, [ROI], True, (0, 255, 255), 2)
-    
-    # Ghi text thông tin
-    cv2.putText(frame, f'In ROI Count: {count}', (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-    
-    cv2.imshow("Chuong 5: Nhan dang anh & Tong hop (YOLO11)", frame)
-    
-    key = cv2.waitKey(1)
-    if key == 27:
-        break
-    elif key == ord(' '):
-        cv2.waitKey(0)
+# In kết quả cuối cùng
+print("\n" + "="*50)
+print("KẾT QUẢ GIÁM SÁT")
+print("="*50)
+print(f"✅ Tổng số đối tượng DUY NHẤT đã đi qua ROI: {total_unique_count}")
+print(f"📊 Tổng số frame đã xử lý: {frame_count}")
+print("="*50)
 
 cap.release()
 cv2.destroyAllWindows()

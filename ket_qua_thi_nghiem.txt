@@ -1,0 +1,22 @@
+KET QUA THI NGHIEM DANH GIA MODEL
+==================================================
+Thoi gian: 2026-05-07 08:16:07
+
+1. THONG KE CO BAN:
+   - Tong so frames: 36
+   - Tong detections: 90
+   - TB detections/frame: 2.50
+
+2. CONFIDENCE SCORE:
+   - Trung binh: 0.543
+   - Trung vi: 0.534
+   - Do lech chuan: 0.118
+   - Min: 0.351
+   - Max: 0.786
+
+3. PHAN BO CONFIDENCE THEO NGUONG:
+   - Conf > 0.3: 90 (100.0%)
+   - Conf > 0.4: 78 (86.7%)
+   - Conf > 0.5: 56 (62.2%)
+   - Conf > 0.6: 29 (32.2%)
+   - Conf > 0.7: 11 (12.2%)
