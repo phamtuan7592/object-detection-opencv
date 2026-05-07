@@ -16,7 +16,7 @@ print("Model loaded successfully!")
 # --- THIẾT LẬP BACKGROUND SUBTRACTOR ---
 print("Khởi tạo thuật toán Background Subtractor MOG2...")
 backSub = cv2.createBackgroundSubtractorMOG2(history=500, varThreshold=50, detectShadows=True)
-
+kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)) # khử nhiểu muối tiêu
 # === HỆ THỐNG TRACKING VÀ ĐẾM ===
 next_object_id = 0
 tracked_objects = {}  # {object_id: {'last_position': (cx, cy), 'counted': False}}
@@ -213,6 +213,10 @@ while True:
         # Xử lý background subtraction
         blurred_frame = cv2.GaussianBlur(frame_display, (5, 5), 0)
         fg_mask = backSub.apply(blurred_frame)
+        
+        fg_mask = cv2.morphologyEx(fg_mask, cv2.MORPH_OPEN, kernel) # Xóa các hạt trắng li ti
+        fg_mask = cv2.morphologyEx(fg_mask, cv2.MORPH_CLOSE, kernel) # Lấp đầy các lỗ đen trong quả
+        
         edges = cv2.Canny(fg_mask, 50, 150)
         
         # Vẽ kết quả
